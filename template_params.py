@@ -4,16 +4,11 @@ Définitions des paramètres typés pour les templates Jinja2.
 Ce module centralise les TypedDicts utilisées pour le rendu des templates,
 permettant une vérification de type stricte et une documentation claire
 des paramètres requis pour chaque template.
-
-Toutes les dépendances sur ebook_translator sont sous TYPE_CHECKING
-pour éviter les imports circulaires à l'exécution.
 """
 
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import Literal, TypedDict
 
-if TYPE_CHECKING:
-    from ebook_translator.glossary import GlossaryEntry, GlossaryMultipleValueEntry
-    from ebook_translator.validator.translation_context import AnalyseLitteraire
+from .types import AnalyseLitteraire, GlossaryEntry, GlossaryMultipleValueEntry
 
 
 class AnalyzeSimplifiedParams(TypedDict):
