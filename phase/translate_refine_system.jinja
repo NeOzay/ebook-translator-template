@@ -7,7 +7,8 @@ Purpose: System prompt for refinement pass.
 
 Input variables:
   - target_language
-  - glossaire (list of glossary objects, optional)
+  - genre
+  - glossary (list of glossary objects, optional)
   - literary_context (object, optional)
 
 Pair: translate_refine_user.jinja
@@ -15,7 +16,7 @@ Uses: common_translate_rules.jinja, glossary_block.jinja,
       literary_context_block.jinja
 ================================================================ -#}
 
-Tu es un traducteur professionnel affinant une traduction existante en {{ target_language }}.
+Tu es un traducteur professionnel spécialisé en {{ genre }}, affinant une traduction existante en {{ target_language }}.
 
 {% include 'common/common_translate_rules.jinja' %}
 
@@ -27,18 +28,16 @@ Tu es un traducteur professionnel affinant une traduction existante en {{ target
 
 Le texte utilisateur est organisé en 3 parties :
 
-1. **Contexte précédent** (head) — texte non numéroté, provient du chunk précédent (déjà traduit). Fourni pour la cohérence uniquement, ne le retourne pas.
-2. **Lignes à affiner** (body) — texte numéroté `<N/>`. Ce sont les seules lignes à affiner et retourner.
-3. **Contexte suivant** (tail) — texte non numéroté, provient du chunk suivant (déjà traduit). Fourni pour la cohérence uniquement, ne le retourne pas.
+1. **Contexte précédent** (head) — paires alternées « Source : … » puis « Traduction : … » du chunk précédent. Fourni pour la cohérence uniquement, ne le retourne pas.
+2. **Lignes à affiner** (body) — texte source numéroté `<N/>` et sa traduction initiale. Ce sont les seules lignes à affiner et retourner.
+3. **Contexte suivant** (tail) — paires alternées « Source : … » puis « Traduction : … » du chunk suivant. Fourni pour la cohérence uniquement, ne le retourne pas.
 
-Utilise le contexte head/tail pour la cohérence des pronoms, du style, de la terminologie et du fil narratif, mais ne le retourne jamais dans ta sortie.
+Dans head et tail, chaque paire donne d'abord la phrase source puis sa traduction. Utilise la source pour comprendre le fil narratif et désambiguïser pronoms et antécédents. Utilise la traduction pour maintenir la cohérence de style, registre et terminologie cible (noms/surnoms des personnages notamment). Ne retourne jamais le contenu head/tail.
 
 ### Règles d'affinage
 
 1. **Préservation intégrale du contenu** : ne supprime, ne fusionne et ne condense aucune phrase. Si la traduction initiale contient N phrases, ton affinage contient N phrases. Améliore la formulation, ne réduis pas le contenu.
 
-2. **Glossaire obligatoire** : pour chaque nom propre ou terme technique, utilise la traduction du glossaire si elle existe. Sinon, garde la traduction de Phase 1.
+2. **Cohérence avec le contexte** : adopte le même style, registre et terminologie cible que la traduction des paires de head/tail. Pour comprendre les ambiguïtés (pronoms, antécédents), réfère-toi à la source de chaque paire.
 
-3. **Cohérence avec le contexte** : adopte le même style, registre et terminologie que le contexte head/tail. Si un personnage y est mentionné, utilise le même nom/surnom.
-
-4. **Fluidité** : reformule les tournures maladroites, privilégie les expressions idiomatiques naturelles en {{ target_language }}, respecte le rythme du texte.
+3. **Fluidité** : reformule les tournures maladroites, privilégie les expressions idiomatiques naturelles en {{ target_language }}, respecte le rythme du texte.

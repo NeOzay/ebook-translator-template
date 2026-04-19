@@ -44,6 +44,7 @@ class TranslateParams(TypedDict):
     """
 
     target_language: str
+    genre: str
     source_text: str
     glossary: list[GlossaryEntry] | None
     literary_context: AnalyseLitteraire | None
@@ -52,21 +53,22 @@ class TranslateParams(TypedDict):
 class RefineParams(TypedDict):
     """
     Paramètres pour refine.jinja (Phase 2 - Affinage avec glossaire).
-
-    Attributes:
-        target_language: Code langue cible (ex: "fr", "en")
-        original_text: Texte source original formaté (head + body + tail)
-        initial_translation: Traduction Phase 1 formatée (head + body + tail)
-        glossaire: Export du glossaire appris en Phase 1
-        expected_count: Nombre de lignes numérotées <N/> attendues dans le body
-        literary_context: Analyse littéraire du chapitre (optionnel, depuis Phase 0)
     """
 
     target_language: str
+    genre: str
     original_text: str
     initial_translation: str
-    head_context: str
-    tail_context: str
+
+    head_context: str | None
+    """Chunk précédent en paires alternées "Source : …" / "Traduction : …",
+    séparées par une ligne vide. None ou chaîne vide si premier chunk.
+    Format produit par l'orchestrateur (alignement source↔cible)."""
+
+    tail_context: str | None
+    """Chunk suivant, même format que head_context. None ou chaîne vide si
+    dernier chunk. Suppose que la phase 1 est terminée sur le chunk suivant."""
+
     glossary: list[GlossaryEntry] | None
     literary_context: AnalyseLitteraire | None
 
