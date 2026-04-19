@@ -40,19 +40,58 @@ class AnalyseLitteraire(TypedDict):
     """Liste de pistes concrètes pour la traduction."""
 
 
+type GlossaryEntryType = (
+    Literal[
+        "personnage",
+        "lieu",
+        "creature",
+        "appellation",
+        "organisation",
+        "objet",
+        "terme_technique",
+        "reference_culturelle",
+    ]
+    | str
+)
+
+type GlossaryEntrySexe = Literal["m", "f", "nc"] | str
+
+
+class LLMTermeGlossaire(TypedDict):
+    """Représente une entrée pour le glossaire produite par le LLM"""
+
+    terme: str
+    """Terme original dans la langue source"""
+
+    type: GlossaryEntryType
+    """Type de terme pour catégorisation"""
+
+    sexe: GlossaryEntrySexe
+    """Sexe pour personnages/créatures (m=masculin, f=féminin, nc=non concerné)"""
+
+    proposition_traduction: str
+    """Proposition de traduction UNIQUE (un seul terme, pas de liste)."""
+
+
 class GlossaryEntry(TypedDict):
+    """Représente un terme exporté depuis le glossaire"""
+
     terme: str
     traduction: str
-    sexe: str
-    type: str
-    weight: NotRequired[int]
+    sexe: GlossaryEntrySexe
+    type: GlossaryEntryType
+    weight: NotRequired[
+        int
+    ]  # nombre de fois que le terme a été proposé par le LLM. Les termes fournis par l'utilisateur n'ont pas de poids.
     confiance: Literal["low", "medium", "high"]
 
 
 class GlossaryMultipleValueEntry(TypedDict):
+    """Représente un terme exporté depuis le glossaire avec plusieurs propositions de traduction possibles pondérées."""
+
     terme: str
     traductions: list[tuple[str, int]]
-    sexes: list[tuple[str, int]]
-    types: list[tuple[str, int]]
+    sexes: list[tuple[GlossaryEntrySexe, int]]
+    types: list[tuple[GlossaryEntryType, int]]
     weight: int
     confidence: Literal["low", "medium", "high"]
