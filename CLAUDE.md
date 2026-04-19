@@ -39,6 +39,8 @@ template/
 | `target_language` | `str` | Langue cible (ex. `"français"`) |
 | `genre` | `str` | Genre du livre, influence les consignes (défaut `"fiction"`) |
 
+> **Convention pratique** : `target_language` vaut toujours `"français"` dans les déploiements actuels. Les exemples correct/incorrect du bloc `common_translate_rules` sont donc hard-codés en français (guillemets « … », vouvoiement, etc.). Si une autre langue cible est ajoutée, ces exemples devront être conditionnés par langue.
+
 Chaque template déclare ses variables supplémentaires avec leur type en entête. Le même contexte est passé aux deux templates d'une paire (system/user).
 
 ## Système de balises
