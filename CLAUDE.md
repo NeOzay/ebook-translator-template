@@ -2,198 +2,197 @@
 
 ## Vue d'ensemble
 
-Ce dépôt contient les templates Jinja2 utilisés par un orchestrateur Python pour traduire des livres (epub) via l'API DeepSeek V3. Les templates sont injectés comme prompts système et utilisateur dans les appels LLM.
+Templates Jinja2 utilisés par un orchestrateur Python pour traduire des epub via l'API DeepSeek V3. Chaque phase segmente le texte, prépare les prompts system/user, appelle le modèle, valide la sortie via un pipeline de checks, et sauvegarde. En cas d'échec de check, un prompt `retry_*` ciblé est émis.
 
-Un pipeline de traduction est utilisé, il est organisé en phases successives.
-Les phases ont la responsabilité suivante :
-- segmentée le texte
-- préparer le système et user prompts pour chaque segment de texte
-- réaliser l'appel au modèle 
-- soumettre la sortie du modèle au pipeline checks
-- sauvegarde la réponse validée
+### Pipeline global
 
-Chaque phase utilise un pipeline de checks configurable, il applique des tests de validation sur la sortie du LLM, et en cas d'échec, un prompt de correction ciblé est utilisé.
+```
+┌──────────────────┐
+│ Analyse littér.  │─┐
+│ (analyze_chapter)│ │
+│ → contexte       │ │
+└──────────────────┘ │    ┌─────────────┐   ┌──────────────┐
+                     ├──→ │ Traduction  │ → │ Raffinement  │
+┌──────────────────┐ │    │ (phase 1)   │   │ (phase 2)    │
+│ Glossaire        │─┘    │ translate_  │   │ translate_   │
+│ (glossary) ↻     │      │ base        │   │ refine       │
+│ → entrées pondér.│      └─────────────┘   └──────────────┘
+└──────────────────┘
+```
+
+Analyse littéraire et glossaire : phases **indépendantes**, parallèles (tailles de blocs différentes). Le glossaire boucle jusqu'à convergence. Les deux produits alimentent les phases de traduction.
 
 ## Architecture des templates
 
-### Convention de nommage
-
-Tous les templates suivent la convention `_system.jinja` / `_user.jinja` :
-- **System** : rôle, règles, exemples, format de sortie — invariant entre les appels d'un même type
-- **User** : données variables (texte source, traduction incorrecte, compteurs d'erreur)
-
-## Concepts clés
-
-### Système de balises
-
-Le texte source utilise deux types de balises :
-- `<N/>` (ex. `<0/>`, `<1/>`, `<25/>`) : balise de numérotation de ligne. Chaque ligne traduite doit commencer par la même balise. Le modèle ne doit pas changer l'ordre ni le nombre de lignes.
-- `</>` : balise de formatage. Remplace les vraies balises HTML de l'epub. Le modèle doit conserver exactement le même nombre de `</>` aux mêmes positions relatives. Elles sont reconstruites en balises HTML après traduction.
-
-Les lignes sans balise `<N/>` sont du contexte (non traduites, non incluses dans la sortie).
-
-Le marqueur `[=[END]=]` termine chaque sortie de traduction/correction.
-
-### Glossaire
-
-Le glossaire est séparé de l'analyse littéraire pour permettre des tailles de blocs différentes (petits blocs pour le glossaire, grands pour l'analyse).
-
-**Structure d'une entrée glossaire (sortie LLM) :**
-```json
-{
-  "glossaire": {
-    "colonnes": ["terme", "type", "sexe", "proposition_traduction"],
-    "entrees": [
-      ["Dark Army", "organisation", "nc", "Armée des Ténèbres"]
-    ]
-  }
-}
+```
+template/
+├── phase/      — templates principaux (un couple system/user par type d'appel)
+└── common/     — blocs réutilisables (includes)
 ```
 
-Le format en listes (pas en objets) est un choix d'économie de tokens.
+**Convention** : `_system.jinja` (rôle, règles, format — invariant) / `_user.jinja` (données variables). Les `retry_*` sont des prompts de correction ciblés, émis sur échec de check.
 
-**Énumération `type` :**
-`personnage`, `lieu`, `creature`, `appellation`, `organisation`, `objet`, `terme_technique`, `reference_culturelle`
+**Variables globales** disponibles dans toute phase :
 
-**Règles de priorité en cas d'ambiguïté :**
+| Variable | Type | Description |
+|----------|------|-------------|
+| `target_language` | `str` | Langue cible (ex. `"français"`) |
+| `genre` | `str` | Genre du livre, influence les consignes (défaut `"fiction"`) |
+
+Chaque template déclare ses variables supplémentaires avec leur type en entête. Le même contexte est passé aux deux templates d'une paire (system/user).
+
+## Système de balises
+
+- `<N/>` (ex. `<0/>`, `<25/>`) : numéro de ligne. Chaque ligne traduite doit commencer par la même balise. Ordre et nombre préservés.
+- `</>` : balise de formatage, remplace les vraies balises HTML. Nombre et positions relatives préservés exactement. Reconstruites en HTML après traduction.
+- Lignes sans `<N/>` : contexte (non traduit, non inclus dans la sortie).
+- `[=[END]=]` : marqueur de fin de sortie.
+
+## Glossaire
+
+Phase dédiée (pas l'analyse littéraire) pour permettre des petits blocs (extraction fine) vs grands blocs pour l'analyse.
+
+**Sortie LLM :**
+```json
+{"glossaire": {
+  "colonnes": ["terme", "type", "sexe", "proposition_traduction"],
+  "entrees": [["Dark Army", "organisation", "nc", "Armée des Ténèbres"]]
+}}
+```
+
+Format listes (pas objets) pour économiser des tokens.
+
+**`type`** : `personnage`, `lieu`, `creature`, `appellation`, `organisation`, `objet`, `terme_technique`, `reference_culturelle`.
+
+**Priorité en cas d'ambiguïté** (gauche prime) :
 `personnage > creature > lieu > appellation > organisation > objet > terme_technique > reference_culturelle`
 
-Règles spécifiques :
-- Un être nommé individuellement est un `personnage`, pas une `creature`
-- Une fonction/titre/surnom générique est une `appellation`, pas un `personnage`
-- Tout groupe structuré (armée, guilde, faction) est une `organisation`
-- `reference_culturelle` est réservé aux références au monde réel
+- Être nommé individuellement = `personnage`, pas `creature`
+- Titre/surnom/rôle générique = `appellation`, pas `personnage`
+- Groupe structuré (armée, guilde, faction) = `organisation`
+- `reference_culturelle` = monde réel uniquement
 
-**Énumération `sexe` :** `m`, `f`, `nc`
+**`sexe`** : `m`, `f`, `nc`. `m`/`f` priment sur `nc` en conflit ; entre `m` et `f`, la proposition dominante l'emporte.
 
-Priorité : `f = m >> nc` (m ou f remplace nc quand il y a conflit)
+### Cycle de vie
 
-**Cycle de vie d'un terme :**
-1. Extraction lors de la phase 0 glossaire
-2. Agrégation de chaque proposition, augmentation du poids d'un (traduction, type, sexe indépendamment)
-3. Calcul de confiance (sur les traductions uniquement)
-4. Réinjection dans les prompts suivants selon le niveau de confiance
+1. **Extraction** par la phase glossaire sur chaque bloc.
+2. **Agrégation** Python : chaque proposition incrémente indépendamment le poids de sa `traduction`, `type`, `sexe` (trois distributions par terme).
+3. **Confiance** calculée sur la distribution des traductions uniquement.
+4. **Réinjection** selon règles par phase (voir plus bas).
 
-**Niveaux de confiance :**
+La classe `Glossary` conserve **toutes** les propositions avec leurs poids, sans seuil. Les seuils sont des **politiques de lecture**, pas de stockage. Export/import possible pour reprise de convergence ou partage entre livres.
 
-| Niveau | Seuil | Comportement dans le prompt | Sortie |
-|--------|-------|-----------------------------|--------|
-| `high` | score ≥ 0.7 | Affiché en format compact (contexte) | Exclu de la sortie |
-| `medium` | score ≥ 0.6 | Propositions affichées avec poids | Inclus, arbitrage possible |
-| `low` | score < 0.6 | Propositions affichées avec poids | Inclus, arbitrage nécessaire |
+### Niveaux de confiance
 
-Seuil d'inclusion : seuls les termes avec `weight ≥ 3` et present dans le texte sont réinjectés.
+| Niveau | Score | Signification |
+|--------|-------|---------------|
+| `high` | ≥ 0.7 | Stable, converge |
+| `medium` | ≥ 0.6 | Dominante probable, arbitrage possible |
+| `low` | < 0.6 | Conflit ou signal faible |
 
-**Formule de confiance :**
+**Formule** (sur la distribution des traductions) :
 ```python
 def compute_confidence(d: list[int]) -> float:
     total = sum(d)
-    max_val = max(d)
-    ratio = max_val / total
+    ratio = max(d) / total
     dominance = math.pow(ratio, 0.5)
-    k = 2
-    masse = total / (total + k)
-    score = dominance * masse
-    return round(score, 2)
+    masse = total / (total + 2)  # k=2
+    return round(dominance * masse, 2)
 ```
 
-**Sélection des propositions à afficher :**
-Les traductions sont ajoutées dans l'ordre décroissant de poids jusqu'à ce que le score de couverture (même formule, appliquée sur la fraction couverte) atteigne le seuil.
+`masse` pénalise les faibles volumes : une unanimité aveugle ne produit pas de `high` tant que le poids total reste bas.
 
-**Structures Python :**
+**Sélection des propositions affichées** : ajoutées par poids décroissant jusqu'à ce que le score de couverture atteigne le seuil. Même logique pour `types` et `sexes`.
 
-`GlossaryEntry` — entrée résolue injectée dans les phases 1 et 2 via `glossary_block.jinja` :
-- `terme`, `traduction`, `type`, `sexe` : valeurs uniques résolues
-- `confidence` : `"low"` / `"medium"` / `"high"`
-- `weight` (optionnel) : absent pour les termes fournis par l'utilisateur
+### Règles d'injection par phase
 
-`GlossaryMultipleValueEntry` — entrée avec propositions multiples pondérées, injectée en phase 0 via `glossary_existing_block.jinja` :
+**Phase glossaire** — via `glossary_existing_block.jinja` :
+- Filtre : `weight ≥ 3` **et** terme présent dans le bloc courant
+- Injecte tous les niveaux : `high` en contexte compact (exclu de la sortie LLM), `medium`/`low` en propositions pondérées (inclus pour arbitrage)
+
+**Phases 1/2** — via `glossary_block.jinja` :
+- Filtre : **dominance totale** (une seule traduction observée, ou unanimité parfaite)
+- Les `low` dispersés sont ignorés, même avec w≥3
+- w=2/3 unanime aveugle suffit ; traductions concurrentes rejetées
+
+Conséquence : un terme reste en arbitrage (phase glossaire) jusqu'à dominance. Aucune contamination des phases traduction par du bruit non-résolu.
+
+### Structures Python
+
+`GlossaryEntry` — entrée **résolue** (valeurs uniques) pour phases 1/2 via `glossary_block.jinja` :
+- `terme`, `traduction`, `type`, `sexe`, `confidence`
+- `weight` optionnel (absent pour termes user)
+
+`GlossaryMultipleValueEntry` — **multi-propositions pondérées** pour phase glossaire via `glossary_existing_block.jinja` :
 - `terme`, `weight`, `confidence`
-- `traductions` : `list[tuple[str, int]]` — propositions triées par poids décroissant
-- `sexes` : `list[tuple[str, int]]`
-- `types` : `list[tuple[str, int]]`
+- `traductions`, `sexes`, `types` : `list[tuple[str, int]]` triées par poids décroissant
 
-### Contexte littéraire
+**Distinction des deux blocs** : `glossary_block.jinja` (résolu, phases 1/2) vs `glossary_existing_block.jinja` (multi-propositions, phase glossaire).
 
-Produit par la phase 0 analyse, injecté dans les phases 1 et 2 via `literary_context_block.jinja`. Contient : résumé narratif, tonalité/ambiance, style d'écriture, thèmes/images clés, références culturelles, pistes de traduction.
+## Contexte littéraire
+
+Produit par `analyze_chapter_system.jinja`, injecté dans les phases 1/2 via `literary_context_block.jinja`. Contient : résumé narratif, tonalité, style, thèmes, références culturelles, pistes de traduction.
+
+## Retry et checks
+
+Chaque sortie LLM passe par un pipeline de checks (Python). Sur échec, un `retry_*` produit un prompt de correction ciblé.
+
+| Template | Déclenché quand |
+|----------|-----------------|
+| `retry_correct_fragments_system` | Nombre de `</>` incorrect (modes `strict`/`flexible`) |
+| `retry_correct_punctuation_system` | Incohérence de ponctuation |
+| `retry_translate_missing_lines_targeted_system` | Lignes `<N/>` manquantes |
+| `retry_translate_sentence_system` | Phrase à retraduire |
+| `retry_correct_analysis_invalid_json_system` | JSON contexte littéraire invalide |
+| `retry_correct_analysis_missing_sections_system` | Sections obligatoires manquantes |
+
+Les retry de traduction utilisent `common_translate_rules_light.jinja` (sans les exemples) : le modèle a déjà vu les règles complètes au premier appel.
 
 ## Principes de rédaction des prompts
 
-### Ce qu'il faut faire
+**Faire** :
+- Ton neutre et déclaratif ("La sortie doit contenir exactement 3 `</>`")
+- Règles déclaratives, pas impératives
+- Séparer règles invariantes (system) / données variables (user)
+- Une seule occurrence de chaque règle
+- Règles avant données
+- Exemples concrets correct/incorrect
+- Contraintes de format explicites ("Commence par `{`", "termine par `[=[END]=]`")
 
-- **Ton neutre et déclaratif** : "La sortie doit contenir exactement 3 `</>`", pas "Tu as ENCORE échoué !"
-- **Règles déclaratives, pas impératives** : le LLM ne compte pas, il suit des contraintes
-- **Séparer les règles invariantes (system) des données variables (user)**
-- **Une seule occurrence de chaque règle** : pas de répétition pour "insister"
-- **Les règles avant les données** : le modèle lit les instructions avant de voir le texte à traiter
-- **Exemples concrets avec correct/incorrect** : le modèle apprend par l'exemple
-- **Contraintes de format explicites** : "Commence par `{` et termine par `}`", "termine par `[=[END]=]`"
+**Éviter** :
+- Emojis dans les titres (tokens sans signal)
+- Séparateurs `---` (un `###` suffit)
+- Ton punitif (bruit sans effet)
+- Explications du "pourquoi" des instructions
+- Répétition de règles pour "insister"
+- Numérotation bancale (`règle 2.5`, `règle 3bis`)
 
-### Ce qu'il faut éviter
+**Économie de tokens** : retry en version `light`, format listes pour le glossaire, `nc` (2 tokens) au lieu de `non_concerne`.
 
-- **Emojis dans les titres** : ils consomment des tokens sans signal sémantique pour le modèle
-- **Séparateurs `---`** : un `###` suffit comme séparateur
-- **Ton punitif** ("Ta tâche a ÉCHOUÉ") : bruit sans effet sur DeepSeek V3
-- **Texte explicatif sur le "pourquoi"** des instructions : le modèle n'a pas besoin de savoir pourquoi le contexte est utile, juste de l'utiliser
-- **Répéter la même règle** à plusieurs endroits pour "insister" : ça dilue le signal
-- **Numérotation bancale** (règle 2.5) : signal de hiérarchie confuse
-
-### Économie de tokens
-
-- Les retry utilisent `common_translate_rules_light.jinja` (pas la version complète avec les exemples)
-- Les termes `high` du glossaire sont en format compact (une ligne) et exclus de la sortie
-- Le glossaire utilise le format listes (pas objets) pour économiser des tokens
-- `nc` comme valeur de sexe (2 tokens) plutôt que `non_concerne` (4+ tokens)
-
-## Modification des templates
-
-### Avant de modifier
-
-1. Identifier quel(s) template(s) sont impactés (vérifier les includes)
-2. Vérifier que le changement ne crée pas de contradiction avec un include partagé
-3. Les includes sont utilisés par plusieurs templates — un changement dans un include affecte tous ses consommateurs
-
-### Graphe de dépendances
+## Graphe de dépendances
 
 ```
-translate_base_system
-  ├── common_translate_rules
-  ├── glossary_block
-  └── literary_context_block
-
-translate_refine_system
+translate_base_system / translate_refine_system
   ├── common_translate_rules
   ├── glossary_block
   └── literary_context_block
 
 retry_correct_fragments_system         [mode: "strict" | "flexible"]
-  └── common_correct_rules
-
 retry_correct_punctuation_system
   └── common_correct_rules
 
 retry_translate_missing_lines_targeted_system
-  └── common_translate_rules_light
-
 retry_translate_sentence_system
   └── common_translate_rules_light
 
-retry_correct_analysis_invalid_json_system
+retry_correct_analysis_*_system        (aucun include)
+
+analyze_chapter_system                 [existing_analysis: bool — mode incrémental]
   (aucun include)
 
-retry_correct_analysis_missing_sections_system
-  (aucun include)
-
-analyze_chapter_simplified_system
-  (aucun include)
-
-analyze_chapter_incremental_system
-  (aucun include)
-
-test_glossary_system
+glossary_system
   └── glossary_existing_block
 ```
 
-### Variables d'entrée par templates
-
-Les variables utilisées par un template sont déclarées dans l'entête, le type de chaque variable doit être indiqué.
+Seuls les `_system.jinja` sont listés : les `_user.jinja` ne font pas d'include. Avant de modifier un include partagé : vérifier tous ses consommateurs (contradiction possible).

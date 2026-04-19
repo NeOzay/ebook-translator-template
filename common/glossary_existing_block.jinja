@@ -1,13 +1,14 @@
 {#- ================================================================
-GLOSSARY_EXISTING_BLOCK.JINJA - Existing glossary reinjection (analysis)
+GLOSSARY_EXISTING_BLOCK.JINJA - Existing glossary reinjection (glossary extraction)
 
 Included by:
-  - analyze_chapter_simplified_system.jinja (Phase 0 - first pass)
-  - analyze_chapter_incremental_system.jinja (Phase 0 - incremental)
-  - test_glossary_system.jinja (glossary behavior tests)
+  - glossary_system.jinja (glossary extraction phase)
+
+Precondition: caller must guard with `{% if existing_glossary %}`.
+  This block assumes existing_glossary is non-empty.
 
 Input variable:
-  - existing_glossary: list of GlossaryMultipleValueEntry objects
+  - existing_glossary: list of GlossaryMultipleValueEntry objects (non-empty)
       - terme (str): original term
       - traductions: list of (str, int) tuples — translation + weight
       - sexes: list of (str, int) tuples — gender + weight
@@ -20,12 +21,12 @@ Purpose: Render existing glossary entries in two groups:
   - Validated (high confidence): shown for context, excluded from output
   - To arbitrate (medium/low): must be included in output with chosen values
 ================================================================ -#}
-{%- if existing_glossary and existing_glossary|length > 0 -%}
-
 {%- set validated = existing_glossary | selectattr('confidence', 'equalto', 'high') | list -%}
 {%- set to_arbitrate = existing_glossary | rejectattr('confidence', 'equalto', 'high') | list -%}
 
 ### Glossaire existant
+
+Pour tout terme rencontré dans le bloc courant qui n'est pas listé ci-dessous, ajoute-le au glossaire comme nouvelle entrée.
 
 {% if validated|length > 0 -%}
 **Termes validés** (confiance haute) — NE PAS inclure dans la sortie :
@@ -55,6 +56,3 @@ Règles :
 
 {% endfor -%}
 {% endif -%}
-
-Pour les termes non listés ci-dessus, ajoute-les au glossaire comme nouvelles entrées.
-{%- endif %}

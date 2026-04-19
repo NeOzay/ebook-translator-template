@@ -6,34 +6,29 @@ permettant une vérification de type stricte et une documentation claire
 des paramètres requis pour chaque template.
 """
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from .types import AnalyseLitteraire, GlossaryEntry, GlossaryMultipleValueEntry
 
 
-class AnalyzeSimplifiedParams(TypedDict):
+class AnalyzeChapterParams(TypedDict):
     """
-    Paramètres pour analyze_simplified.jinja (Analyse simplifiée du chapitre).
+    Paramètres pour analyze_chapter_system.jinja / analyze_chapter_user.jinja.
 
-    Attributes:
-        chapter_name: Nom du chapitre à analyser
+    existing_analysis absent = premier bloc (chapter_text requis).
+    existing_analysis présent = mode incrémental (current_block, total_blocks, block_text, is_last_block requis).
     """
 
     chapter_name: str
     target_language: str
-    chapter_text: str
     genre: str
-
-
-class AnalyzeIncremental(TypedDict):
-    chapter_name: str
+    # Premier bloc
+    chapter_text: str
+    # Incrémental
+    existing_analysis: NotRequired[str | None]
     current_block: int
     total_blocks: int
-    partial_analysis_json: str
-    block_text: str
     is_last_block: bool
-    genre: str
-    target_language: str
 
 
 class GlossaryParams(TypedDict):
