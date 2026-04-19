@@ -100,6 +100,19 @@ def compute_confidence(d: list[int]) -> float:
 **Sélection des propositions à afficher :**
 Les traductions sont ajoutées dans l'ordre décroissant de poids jusqu'à ce que le score de couverture (même formule, appliquée sur la fraction couverte) atteigne le seuil.
 
+**Structures Python :**
+
+`GlossaryEntry` — entrée résolue injectée dans les phases 1 et 2 via `glossary_block.jinja` :
+- `terme`, `traduction`, `type`, `sexe` : valeurs uniques résolues
+- `confidence` : `"low"` / `"medium"` / `"high"`
+- `weight` (optionnel) : absent pour les termes fournis par l'utilisateur
+
+`GlossaryMultipleValueEntry` — entrée avec propositions multiples pondérées, injectée en phase 0 via `glossary_existing_block.jinja` :
+- `terme`, `weight`, `confidence`
+- `traductions` : `list[tuple[str, int]]` — propositions triées par poids décroissant
+- `sexes` : `list[tuple[str, int]]`
+- `types` : `list[tuple[str, int]]`
+
 ### Contexte littéraire
 
 Produit par la phase 0 analyse, injecté dans les phases 1 et 2 via `literary_context_block.jinja`. Contient : résumé narratif, tonalité/ambiance, style d'écriture, thèmes/images clés, références culturelles, pistes de traduction.
@@ -153,7 +166,7 @@ translate_refine_system
   ├── glossary_block
   └── literary_context_block
 
-retry_correct_fragments_system
+retry_correct_fragments_system         [mode: "strict" | "flexible"]
   └── common_correct_rules
 
 retry_correct_punctuation_system
@@ -164,6 +177,12 @@ retry_translate_missing_lines_targeted_system
 
 retry_translate_sentence_system
   └── common_translate_rules_light
+
+retry_correct_analysis_invalid_json_system
+  (aucun include)
+
+retry_correct_analysis_missing_sections_system
+  (aucun include)
 
 analyze_chapter_simplified_system
   (aucun include)
