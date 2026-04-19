@@ -95,17 +95,10 @@ class MissingLinesParams(TypedDict):
 
 class RetryFragmentsParams(TypedDict):
     """
-    Paramètres pour retry_fragments.jinja (Retry fragments - Mode NORMAL).
-
-    Utilisé pour corriger le nombre de séparateurs `</>` incorrect.
-    Mode NORMAL : préservation stricte des positions relatives.
+    Paramètres pour retry_correct_fragments.jinja.
 
     Attributes:
-        target_language: Code langue cible (ex: "fr", "en")
-        original_text: Texte source original
-        incorrect_translation: Traduction produite avec nombre incorrect de séparateurs
-        expected_separators: Nombre de séparateurs `</>` attendus
-        actual_separators: Nombre de séparateurs `</>` trouvés dans la traduction
+        mode: "strict" (positions relatives préservées) ou "flexible" (positions adaptées à la grammaire cible)
     """
 
     target_language: str
@@ -114,28 +107,6 @@ class RetryFragmentsParams(TypedDict):
     expected_separators: int
     actual_separators: int
     mode: Literal["strict", "flexible"]
-
-
-class RetryFragmentsFlexibleParams(TypedDict):
-    """
-    Paramètres pour retry_fragments_flexible.jinja (Retry fragments - Mode FLEXIBLE).
-
-    Utilisé pour corriger le nombre de séparateurs `</>` incorrect.
-    Mode FLEXIBLE : placement libre des séparateurs (même nombre).
-
-    Attributes:
-        target_language: Code langue cible (ex: "fr", "en")
-        original_text: Texte source original
-        incorrect_translation: Traduction produite avec nombre incorrect de séparateurs
-        expected_separators: Nombre de séparateurs `</>` attendus
-        actual_separators: Nombre de séparateurs `</>` trouvés dans la traduction
-    """
-
-    target_language: str
-    original_text: str
-    incorrect_translation: str
-    expected_separators: int
-    actual_separators: int
 
 
 class RetryPunctuationParams(TypedDict):

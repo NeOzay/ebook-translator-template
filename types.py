@@ -83,7 +83,7 @@ class GlossaryEntry(TypedDict):
     weight: NotRequired[
         int
     ]  # nombre de fois que le terme a été proposé par le LLM. Les termes fournis par l'utilisateur n'ont pas de poids.
-    confiance: Literal["low", "medium", "high"]
+    confidence: Literal["low", "medium", "high"]
 
 
 class GlossaryMultipleValueEntry(TypedDict):
