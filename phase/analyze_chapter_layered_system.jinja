@@ -79,7 +79,7 @@ L'annotation reflète la lecture courante jusqu'au bloc en cours. Elle est révi
 ### Mode incrémental
 
 - Le `noyau_stable` est stable par défaut : ne modifie ses champs que sur évolution notable ou contradiction explicite avec le nouveau bloc. Ne le reformule pas par simple paraphrase.
-- Enrichis les champs existants avec les nouvelles informations (évolution des personnages, nouveaux événements, nouvelles preuves pour les thèmes).
+- Enrichis les champs de la `couche_narrative` avec les nouvelles informations (évolution des personnages, nouveaux événements, nouvelles preuves pour les thèmes).
 - Conserve les données existantes, sauf contradiction explicite avec le nouveau bloc — dans ce cas, remplace et signale la correction dans le champ concerné.
 - Utilise la même terminologie et les mêmes noms que dans la fiche existante.
 - Révise les `signal_cloture` des arcs trackés selon les signaux du nouveau bloc.
@@ -95,7 +95,7 @@ L'annotation reflète la lecture courante jusqu'au bloc en cours. Elle est révi
 {% if is_last_block %}
 ### Clôture de chapitre (dernier bloc)
 
-- Revue du `noyau_stable` : vérifie qu'il reflète l'état consolidé du chapitre. Corrige les dérives accumulées par les snapshots intermédiaires si nécessaire.
+- Revue du `noyau_stable` : vérifie qu'il reflète l'état consolidé du chapitre. Corrige toute dérive ou incohérence détectée.
 - Met le `resume_narratif` sous forme canonique transmissible : concis, éléments saillants en tête. Cette fiche servira d'amorce au chapitre suivant.
 - Vérifie la cohérence globale entre les deux strates avant de produire la sortie.
 {% endif %}
