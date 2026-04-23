@@ -62,6 +62,7 @@ L'annotation reflète la lecture courante jusqu'au bloc en cours. Elle est révi
 
 ### Budgets par champ
 
+- `noyau_stable.genre_affine` : libellé court et précis (ex. `"thriller psychologique"`, `"fantasy épique"`), cohérent avec le `genre` fourni en entrée mais autorisant une précision. Doit pouvoir remplacer `genre` dans la phrase "traducteur professionnel spécialisé en {genre_affine}".
 - `noyau_stable.registre`, `style_auctorial`, `tonalite_generale` : 1 à 2 phrases. Ajuster uniquement sur changement notable.
 - `noyau_stable.pistes_traduction` : max 15 entrées. Fusionne les pistes redondantes.
 - `couche_narrative.resume_narratif` : max 8 lignes au total. Condense les événements anciens si dépassement.
@@ -77,6 +78,7 @@ L'annotation reflète la lecture courante jusqu'au bloc en cours. Elle est révi
 {% elif is_incremental %}
 ### Mode incrémental
 
+- Le `noyau_stable` est stable par défaut : ne modifie ses champs que sur évolution notable ou contradiction explicite avec le nouveau bloc. Ne le reformule pas par simple paraphrase.
 - Enrichis les champs existants avec les nouvelles informations (évolution des personnages, nouveaux événements, nouvelles preuves pour les thèmes).
 - Conserve les données existantes, sauf contradiction explicite avec le nouveau bloc — dans ce cas, remplace et signale la correction dans le champ concerné.
 - Utilise la même terminologie et les mêmes noms que dans la fiche existante.
