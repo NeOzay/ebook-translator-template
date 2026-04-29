@@ -146,6 +146,62 @@ Une fois la structure migrée dans Pydantic, **ne pas la redécrire dans le prom
 
 Cas particulier : si une contrainte exprimée dans le schéma est contre-intuitive (un enum à valeurs rares, par exemple), un **rappel court avec exemple** dans le prompt peut aider — à mesurer.
 
+## Pattern : chain-of-thought via l'ordre des champs
+
+Recommandé par la doc Instructor (`concepts/prompting`). Principe : un LLM auto-régressif génère les champs d'un objet structuré **dans l'ordre de leur déclaration**. Placer un champ de raisonnement **avant** un champ de décision force le modèle à expliciter sa réflexion avant de fixer la valeur finale — un chain-of-thought structurel, sans toucher au prompt.
+
+### Forme canonique
+
+```python
+class Decision(BaseModel):
+    raisonnement: str = Field(
+        description="Raisonnement étape par étape qui justifie le choix ci-dessous"
+    )
+    valeur: Literal["a", "b", "c"]
+```
+
+Le LLM doit produire `raisonnement` avant de pouvoir produire `valeur` ; il "pense" donc explicitement avant de choisir.
+
+### Recommandations de la doc Instructor
+
+- **Localiser, ne pas globaliser** : ajouter un champ de raisonnement **dans le sous-modèle concerné** plutôt qu'un seul champ `chain_of_thought` global au niveau racine. Plus le raisonnement est ciblé, plus il est utile.
+- **Décrire le raisonnement attendu** dans le `description=` du `Field` : "Pas à pas, en citant les indices du texte" oriente bien mieux qu'un simple "raisonnement".
+- **Réserver aux décisions non triviales** : sur un champ obvie (`titre: str`), un CoT est du gaspillage de tokens. Cibler les choix d'enum, les arbitrages, les révisions conditionnelles.
+
+### Trade-off à arbitrer
+
+Un champ CoT ajoute des tokens **en sortie**, donc du coût et de la latence. À évaluer sur chaque cas : un CoT sur un sous-modèle répété N fois (ex. chaque arc d'`arcs_en_cours`) multiplie l'inflation.
+
+Règle pratique : ajouter un CoT là où, sans lui, on observe une dérive ou un mauvais choix — pas par principe.
+
+### Application possible aux phases du projet
+
+Ces propositions sont **conceptuelles**, à valider par mesure avant adoption.
+
+**Glossaire** — la décision sensible est le `type` (priorité d'arbitrage complexe). Le format `colonnes` / `entrees` impose des chaînes plates par entrée, donc pas d'imbrication d'objet possible. Deux options :
+
+- **Pas de CoT structurel sur le glossaire.** Le format actuel privilégie l'économie de tokens ; ajouter du raisonnement par entrée romprait l'invariant. Préférer continuer à guider le `type` via les règles du prompt.
+- **CoT global au niveau du bloc**, hors du tableau : un champ `analyse_extraction: str` placé **avant** `glossaire` au niveau racine, qui formule en une ligne la lecture du bloc avant l'extraction. À mesurer si ça améliore la précision des `type` ; à abandonner sinon.
+
+**`analyze_chapter_layered`** — plusieurs candidats :
+
+- Sur chaque entrée d'`arcs_en_cours`, placer `raisonnement_signal_cloture: str` **avant** `signal_cloture`. La sémantique de l'enum (`aucun` / `resolution_explicite` / `ambigu`) repose sur une lecture fine du texte ; un raisonnement court peut stabiliser le choix. Coût : un CoT par arc (à plafonner si la liste s'allonge).
+- En mode `incremental`, ajouter au niveau de `NoyauStable` un champ `decision_revision: str` **avant** les champs effectivement modifiés, décrivant si une révision est nécessaire et pourquoi. Substitue partiellement la consigne textuelle "ne modifie ses champs que sur évolution notable ou contradiction explicite" en la rendant **observable et auditable** dans la sortie. Coût modéré (un seul champ).
+- En mode `seed`, idem côté `couche_narrative` : `decision_amorce: str` avant le résumé, pour expliciter ce qui est repris du chapitre précédent et ce qui est introduit.
+
+### Conséquence pour la rédaction des prompts
+
+Un CoT structurel dans le modèle **dispense d'écrire les mêmes consignes en prose** dans le prompt :
+
+- Avant : "Avant de modifier le `noyau_stable`, vérifie qu'il y a un changement notable et explique-le."
+- Après : un champ `decision_revision: str = Field(description="Indique si le noyau évolue, et en citant le passage qui le justifie")` placé avant les champs concernés.
+
+C'est une autre forme du déplacement prompt → schéma : **non plus déplacer la *structure*, mais déplacer la *séquence de raisonnement* attendue**.
+
+### Conséquence pour la trace
+
+Les CoT sont écrits dans la trace comme n'importe quel champ. Avantage : on peut **auditer a posteriori** pourquoi le LLM a fait tel choix (très utile pour le debug d'arbitrage du glossaire ou de stabilité du noyau). À documenter dans la convention de trace si on adopte le pattern.
+
 ## Cas spécifique : format `colonnes` / `entrees` du glossaire
 
 Décision : **conserver le format actuel**. Le strict mode l'accepte (c'est du JSON Schema valide), mais ne contraint pas la structure interne des sous-listes (toutes typées `str`). Les contraintes "exactement 4 chaînes par entrée, dans cet ordre, valeurs `type`/`sexe` valides" sont à porter par des `@field_validator`.
