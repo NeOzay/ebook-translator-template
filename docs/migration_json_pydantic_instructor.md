@@ -16,12 +16,46 @@ Toute évolution de la structure JSON impose de mettre à jour en cohérence : l
 
 Faire de **Pydantic la source de vérité unique** de la structure JSON, et déléguer à **Instructor** la conversion modèle → schéma envoyé au LLM ainsi que la boucle de validation/retry.
 
+## Prérequis techniques et état actuel
+
+Ce guide est une **proposition de migration** ; il ne décrit pas l'état courant du projet.
+
+| Élément | État actuel | Cible du guide |
+|---|---|---|
+| API DeepSeek | V3 (`deepseek-chat`) | V4 (`deepseek-v4-flash` par défaut, basculable sur `deepseek-v4-pro`) |
+| Mode tools strict | Indisponible en V3 | Disponible en V4 ; prérequis dur de cette migration |
+| Validation JSON | Checks Python ad-hoc + retries dédiés | Pydantic + boucle Instructor |
+| Tracabilité | Existante côté orchestrateur | Réutilisée via hooks Instructor |
+
+**Conditions de bascule** (à vérifier avant de démarrer) :
+
+- Disponibilité confirmée de `deepseek-v4-flash` et du `Mode.TOOLS_STRICT` côté API DeepSeek.
+- Tarification et quotas V4 acceptables vs. V3 sur le volume cible.
+- Tests de non-régression sur un échantillon représentatif de chapitres avant bascule générale.
+
+**Versions logicielles minimales :**
+
+- **Pydantic ≥ 2.x.** Le guide utilise les API v2 : `pydantic.ConfigDict`, `pydantic.Field`, le décorateur `@field_validator` (et non `@validator` v1), `model_dump_json()` (et non `json()` v1). Une migration depuis Pydantic v1 préalable est nécessaire si la base de code n'est pas déjà sur v2.
+- **Instructor ≥ version exposant `Mode.TOOLS_STRICT`.** À ce jour, ce mode est récent ; vérifier le changelog d'Instructor à l'instant de la migration et figer la version dans le `pyproject.toml` / équivalent.
+- **Client OpenAI Python ≥ 1.x** (le client `openai` v1, sur lequel Instructor se branche).
+
+Imports attendus (référence) :
+
+```python
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import Literal
+import instructor
+from openai import OpenAI
+```
+
+Si la base de code utilise encore Pydantic v1, ce guide ne s'applique **pas tel quel** : adapter d'abord la base à v2 ou transposer les API (`@validator` → `@field_validator`, `Config` interne → `model_config = ConfigDict(...)`, `.json()` → `.model_dump_json()`, etc.).
+
 ## Décisions retenues
 
 | Aspect | Décision |
 |---|---|
-| Validation structurelle | Pydantic |
-| Couche LLM | Instructor sur client OpenAI-compatible (DeepSeek V4) |
+| Validation structurelle | Pydantic v2 |
+| Couche LLM | Instructor sur client OpenAI-compatible (DeepSeek V4 — cible de migration, voir « Prérequis ») |
 | Mode Instructor | `Mode.TOOLS_STRICT` |
 | Modèle DeepSeek par défaut | `deepseek-v4-flash` (configurable, sans thinking) |
 | Mode thinking | Désactivé sur ces phases (incompatible `TOOLS_STRICT`) |
@@ -42,6 +76,8 @@ Faire de **Pydantic la source de vérité unique** de la structure JSON, et dél
 - La description textuelle des enums et des contraintes de longueur, lorsqu'elle est exprimable en types Python.
 - Les checks Python ad-hoc qui dupliquent la structure attendue.
 - Les templates `retry_correct_analysis_invalid_json_*` et `retry_correct_analysis_missing_sections_*` (hors périmètre du guide, mais à supprimer en pratique).
+
+> **Exception explicite au `CLAUDE.md`.** La section *Principes de rédaction des prompts* du `CLAUDE.md` recommande d'inclure des contraintes de format explicites (`Commence par {`, `termine par [=[END]=]`). Cette consigne **reste valable pour toutes les phases qui ne sont pas outillées par Instructor + `TOOLS_STRICT`** (notamment la traduction, qui produit du texte annoté). Pour les seules phases JSON migrées selon ce guide, la contrainte de format est portée par le canal `tools` de l'API et son rappel textuel devient redondant. À documenter en parallèle dans le `CLAUDE.md` (section principes) sous forme de note d'exception, pour éviter une consigne contradictoire entre les deux documents.
 
 ### Ce qui apparaît
 
@@ -149,6 +185,7 @@ La phase est une **analyse incrémentale par blocs** (≈ 5000 tokens) avec troi
 
 ## Modèle DeepSeek et configuration Instructor
 
+- **API cible** : DeepSeek V4 (cf. section « Prérequis »). L'orchestrateur cible aujourd'hui V3 ; cette migration suppose la bascule préalable.
 - **Client** : OpenAI-compatible, base URL DeepSeek, modèle `deepseek-v4-flash` par défaut (paramètre de l'orchestrateur, facilement basculable vers `deepseek-v4-pro`).
 - **Mode Instructor** : `Mode.TOOLS_STRICT`. Le serveur force la conformité au schéma au décodage : les erreurs structurelles (champ manquant, mauvais type, hors enum) sont éliminées côté API.
 - **Thinking** : désactivé sur ces phases. Le strict mode l'exclut. Les phases d'analyse et de glossaire sont exécutées sans thinking ; à mesurer si une dégradation qualitative se manifeste.
