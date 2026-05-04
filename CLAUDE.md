@@ -172,6 +172,8 @@ Les retry de traduction utilisent `common_translate_rules_light.jinja` (sans les
 
 **Économie de tokens** : retry en version `light`, format listes pour le glossaire, `nc` (2 tokens) au lieu de `non_concerne`.
 
+**Exception — phases JSON outillées par Pydantic + Instructor (`Mode.TOOLS_STRICT`)** : pour ces phases (`glossary` ; `analyze_chapter_layered` à venir), la structure JSON et les contraintes de format sont portées par le canal `tools` de l'API et la source de vérité est le modèle Pydantic dans `phase/<phase>_models.py`. Les consignes type "Commence par `{`", "termine par `}`", la section "Structure JSON attendue" et la description textuelle des champs **disparaissent du prompt**. Restent dans le prompt les contraintes non exprimables en schéma : format `colonnes`/`entrees` du glossaire, liste des valeurs autorisées (rappel utile au LLM), exemples d'entrées bien formées, règles d'arbitrage et de catégorisation. Les autres phases (traduction, retries texte) continuent de suivre la règle générale ci-dessus.
+
 ## Graphe de dépendances
 
 ```

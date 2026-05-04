@@ -57,22 +57,6 @@ type GlossaryEntryType = (
 type GlossaryEntrySexe = Literal["m", "f", "nc"] | str
 
 
-class LLMTermeGlossaire(TypedDict):
-    """Représente une entrée pour le glossaire produite par le LLM"""
-
-    terme: str
-    """Terme original dans la langue source"""
-
-    type: GlossaryEntryType
-    """Type de terme pour catégorisation"""
-
-    sexe: GlossaryEntrySexe
-    """Sexe pour personnages/créatures (m=masculin, f=féminin, nc=non concerné)"""
-
-    proposition_traduction: str
-    """Proposition de traduction UNIQUE (un seul terme, pas de liste)."""
-
-
 class GlossaryEntry(TypedDict):
     """Représente un terme exporté depuis le glossaire"""
 

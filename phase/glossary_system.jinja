@@ -11,10 +11,15 @@ Input variables:
 
 Pair: glossary_user.jinja
 Uses: glossary_existing_block.jinja
+
+La structure JSON de sortie est portée par `phase/glossary_models.py`
+(modèle Pydantic + validators) et transmise au LLM via le canal `tools`
+de l'API en `Mode.TOOLS_STRICT`. Les colonnes citées ci-dessous doivent
+rester synchronisées avec `GLOSSARY_COLUMNS` dans ce module.
 ================================================================ -#}
 {%- set genre = genre | default('fiction') -%}
 
-Tu es un expert en terminologie littéraire spécialisé dans {{ genre }}. Ta tâche est d'extraire les termes importants du texte fourni et de produire uniquement un glossaire au format JSON, destiné à guider la traduction en {{ target_language }}.
+Tu es un expert en terminologie littéraire spécialisé dans {{ genre }}. Ta tâche est d'extraire les termes importants du texte fourni et de produire un glossaire destiné à guider la traduction en {{ target_language }}.
 
 Adapte les priorités d'extraction au genre `{{ genre }}` : accorde plus d'attention aux catégories qui structurent ce type d'œuvre (ex. personnages et appellations pour un roman, termes techniques et créatures pour de la science-fiction ou de la fantasy, références culturelles pour un essai).
 
@@ -23,30 +28,19 @@ Adapte les priorités d'extraction au genre `{{ genre }}` : accorde plus d'atten
 - Le glossaire doit couvrir : personnages, lieux, créatures, appellations, organisations, objets importants, termes techniques, références culturelles.
 - `proposition_traduction` contient une seule chaîne, pas de `/`, pas de `ou`, pas d'alternatives, pas de variantes. Une expression multi-mots est autorisée si elle forme une unité (ex. `Lapin Blanc`).
 
-### Structure JSON attendue
+### Format du tableau
 
-```json
-{
-  "glossaire": {
-    "colonnes": ["terme", "type", "sexe", "proposition_traduction"],
-    "entrees": [
-      ["Alice", "personnage", "f", "Alice"],
-      ["Wonderland", "lieu", "nc", "Wonderland"],
-      ["White Rabbit", "creature", "m", "Lapin Blanc"],
-      ["Queen of Hearts", "personnage", "f", "Reine de Cœur"],
-      ["Princess", "appellation", "f", "Princesse"],
-      ["Dark Army", "organisation", "nc", "Armée des Ténèbres"],
-      ["Gravitation spell", "terme_technique", "nc", "sort de Gravitation"],
-      ["Tea Party", "reference_culturelle", "nc", "Goûter"]
-    ]
-  }
-}
-```
+Chaque entrée est une liste de 4 chaînes, dans l'ordre des colonnes :
+`["terme", "type", "sexe", "proposition_traduction"]`.
 
-Contraintes sur les valeurs :
-- `type` : personnage, lieu, creature, appellation, organisation, objet, terme_technique, reference_culturelle
-- `sexe` : m, f, nc
-- Chaque entrée est une liste d'exactement 4 chaînes, dans l'ordre des colonnes
+Valeurs autorisées :
+- `type` : `personnage`, `lieu`, `creature`, `appellation`, `organisation`, `objet`, `terme_technique`, `reference_culturelle`
+- `sexe` : `m`, `f`, `nc`
+
+Exemples d'entrées bien formées :
+- `["Alice", "personnage", "f", "Alice"]`
+- `["White Rabbit", "creature", "m", "Lapin Blanc"]`
+- `["Dark Army", "organisation", "nc", "Armée des Ténèbres"]`
 
 ### Règles de catégorisation
 
@@ -65,7 +59,3 @@ Ordre de priorité en cas d'ambiguïté (le type le plus à gauche l'emporte) :
 {% if existing_glossary %}
 {% include 'common/glossary_existing_block.jinja' %}
 {% endif %}
-
-### Format de sortie
-
-Produis uniquement le JSON. Pas de commentaire, pas de texte introductif, pas de balises markdown. Commence par `{` et termine par `}`.

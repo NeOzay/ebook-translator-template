@@ -31,6 +31,31 @@ class AnalyzeChapterParams(TypedDict):
     is_last_block: bool
 
 
+class AnalyzeChapterLayeredParams(TypedDict):
+    """
+    Paramètres pour analyze_chapter_layered_{system,user}.jinja.
+
+    Mode dérivé des entrées :
+      - bootstrap   : ni `existing_analysis` ni `previous_chapter_analysis`
+      - seed        : `previous_chapter_analysis` présent, `existing_analysis` absent
+      - incremental : `existing_analysis` présent
+
+    Les snapshots `existing_analysis` et `previous_chapter_analysis` sont des
+    chaînes JSON sérialisées depuis `phase.analyze_chapter_layered_models.AnalyseChapter`
+    par l'orchestrateur (`AnalyseChapter.model_dump_json()`).
+    """
+
+    chapter_name: str
+    chapter_text: str
+    target_language: str
+    genre: str
+    current_block: int
+    total_blocks: int
+    is_last_block: bool
+    existing_analysis: NotRequired[str | None]
+    previous_chapter_analysis: NotRequired[str | None]
+
+
 class GlossaryParams(TypedDict):
     block_text: str
     target_language: str
