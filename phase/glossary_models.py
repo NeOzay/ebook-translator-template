@@ -13,9 +13,11 @@ Pour ajouter ou renommer une colonne du tableau :
   4. mettre à jour `glossary_system.jinja` (liste des colonnes affichée au LLM).
 """
 
-from typing import Literal
+from typing import Annotated, Literal, NotRequired, TypedDict, override
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import ConfigDict, Field
+
+from template.types import ConvertibleModel, NormStr, NormTupleValidator
 
 GlossaryEntryType = Literal[
     "personnage",
@@ -27,103 +29,107 @@ GlossaryEntryType = Literal[
     "terme_technique",
     "reference_culturelle",
 ]
+type _NormGlossaryEntryType = Annotated[GlossaryEntryType, NormStr]
 
 GlossaryEntrySexe = Literal["m", "f", "nc"]
+type _NormGlossaryEntrySexe = Annotated[GlossaryEntrySexe, NormStr]
 
-GLOSSARY_COLUMNS: tuple[str, ...] = (
+LLMColonneOrder = tuple[
+    Literal["terme"],
+    Literal["type"],
+    Literal["sexe"],
+    Literal["proposition_traduction"],
+]
+type _NormLLMColonneOrder = Annotated[LLMColonneOrder, NormTupleValidator]
+
+_GLOSSARY_COLUMNS: LLMColonneOrder = (
     "terme",
     "type",
     "sexe",
     "proposition_traduction",
 )
 
-_TYPES_AUTORISES: frozenset[str] = frozenset(GlossaryEntryType.__args__)
-_SEXES_AUTORISES: frozenset[str] = frozenset(GlossaryEntrySexe.__args__)
-_TYPE_INDEX: int = GLOSSARY_COLUMNS.index("type")
-_SEXE_INDEX: int = GLOSSARY_COLUMNS.index("sexe")
-_NB_COLONNES: int = len(GLOSSARY_COLUMNS)
+GLOSSARY_TYPES_AUTORISES: frozenset[GlossaryEntryType] = frozenset(
+    GlossaryEntryType.__args__
+)
+
+GLOSSARY_SEXES_AUTORISES: frozenset[GlossaryEntrySexe] = frozenset(
+    GlossaryEntrySexe.__args__
+)
+
+_TYPE_INDEX: int = _GLOSSARY_COLUMNS.index("type")
+_SEXE_INDEX: int = _GLOSSARY_COLUMNS.index("sexe")
+_NB_COLONNES: int = len(_GLOSSARY_COLUMNS)
 
 
-class GlossaireBlock(BaseModel):
+class LLMTermeGlossary(TypedDict):
+    """Représente un terme du glossaire tel que proposé par le LLM."""
+
+    terme: str
+    type: GlossaryEntryType
+    sexe: GlossaryEntrySexe
+    proposition_traduction: str
+
+
+type Entree = tuple[NormStr, _NormGlossaryEntryType, _NormGlossaryEntrySexe, NormStr]
+
+
+class LLMGlossaryModel(ConvertibleModel[list[LLMTermeGlossary]]):
     """Tableau du glossaire au format colonnes/entrees."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-    colonnes: list[
-        Literal["terme", "type", "sexe", "proposition_traduction"]
-    ] = Field(
+    colonnes: _NormLLMColonneOrder = Field(
         description=(
             "Noms des colonnes, dans l'ordre. Doit valoir exactement "
-            f"{list(GLOSSARY_COLUMNS)}."
+            f"{list(_GLOSSARY_COLUMNS)}."
         ),
         min_length=_NB_COLONNES,
         max_length=_NB_COLONNES,
     )
 
-    entrees: list[list[str]] = Field(
+    entrees: list[Entree] = Field(
         description=(
             "Liste des entrées du glossaire. Chaque entrée est une liste "
             f"d'exactement {_NB_COLONNES} chaînes, dans l'ordre des colonnes."
         ),
     )
 
-    @field_validator("colonnes")
-    @classmethod
-    def _colonnes_dans_lordre(
-        cls, valeur: list[str]
-    ) -> list[str]:
-        attendu = list(GLOSSARY_COLUMNS)
-        if list(valeur) != attendu:
-            raise ValueError(
-                f"`colonnes` doit valoir exactement {attendu}, dans cet ordre. "
-                f"Reçu : {list(valeur)}."
+    @override
+    def _build_impl(self) -> list[LLMTermeGlossary]:
+        final_list: list[LLMTermeGlossary] = []
+        for entree in self.entrees:
+            terme, type_, sexe, proposition_traduction = entree
+            final_list.append(
+                {
+                    "terme": terme.strip(),
+                    "type": type_,
+                    "sexe": sexe,
+                    "proposition_traduction": proposition_traduction.strip(),
+                },
             )
-        return valeur
-
-    @field_validator("entrees")
-    @classmethod
-    def _entrees_bien_formees(
-        cls, entrees: list[list[str]]
-    ) -> list[list[str]]:
-        for index, entree in enumerate(entrees):
-            if len(entree) != _NB_COLONNES:
-                raise ValueError(
-                    f"L'entrée à la position {index} contient {len(entree)} "
-                    f"chaînes, alors que {_NB_COLONNES} sont attendues "
-                    f"(une par colonne, dans l'ordre {list(GLOSSARY_COLUMNS)})."
-                )
-
-            type_recu = entree[_TYPE_INDEX]
-            if type_recu not in _TYPES_AUTORISES:
-                raise ValueError(
-                    f"L'entrée à la position {index} a `type` = "
-                    f"{type_recu!r}. Valeurs autorisées : "
-                    f"{sorted(_TYPES_AUTORISES)}."
-                )
-
-            sexe_recu = entree[_SEXE_INDEX]
-            if sexe_recu not in _SEXES_AUTORISES:
-                raise ValueError(
-                    f"L'entrée à la position {index} a `sexe` = "
-                    f"{sexe_recu!r}. Valeurs autorisées : "
-                    f"{sorted(_SEXES_AUTORISES)}."
-                )
-
-            for position, chaine in enumerate(entree):
-                if not chaine or not chaine.strip():
-                    nom_colonne = GLOSSARY_COLUMNS[position]
-                    raise ValueError(
-                        f"L'entrée à la position {index} a la colonne "
-                        f"`{nom_colonne}` vide. Toutes les colonnes "
-                        f"doivent être renseignées."
-                    )
-
-        return entrees
+        return final_list
 
 
-class GlossaireResponse(BaseModel):
-    """Réponse complète de la phase glossaire."""
+class GlossaryEntry(TypedDict):
+    """Représente un terme exporté depuis le glossaire"""
 
-    model_config = ConfigDict(extra="forbid")
+    terme: str
+    traduction: str
+    sexe: GlossaryEntrySexe
+    type: GlossaryEntryType
+    weight: NotRequired[
+        int
+    ]  # nombre de fois que le terme a été proposé par le LLM. Les termes fournis par l'utilisateur n'ont pas de poids.
+    confidence: Literal["low", "medium", "high"]
 
-    glossaire: GlossaireBlock
+
+class GlossaryMultipleValueEntry(TypedDict):
+    """Représente un terme exporté depuis le glossaire avec plusieurs propositions de traduction possibles pondérées."""
+
+    terme: str
+    traductions: list[tuple[str, int]]
+    sexes: list[tuple[GlossaryEntrySexe, int]]
+    types: list[tuple[GlossaryEntryType, int]]
+    weight: int
+    confidence: Literal["low", "medium", "high"]
